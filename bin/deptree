@@ -1,0 +1,286 @@
+#!/usr/bin/env node
+
+"use strict";
+
+// From: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
+if (!Object.assign) {
+	Object.defineProperty(Object,"assign",{
+		enumerable: false,
+		configurable: true,
+		writable: true,
+		value: function(target, firstSource) {
+			"use strict";
+			if (target === undefined || target === null) {
+				throw new TypeError('Cannot convert first argument to object');
+			}
+
+			var to = Object(target);
+			for (var i = 1; i < arguments.length; i++) {
+				var nextSource = arguments[i];
+				if (nextSource === undefined || nextSource === null) {
+					continue;
+				}
+				nextSource = Object(nextSource);
+
+				var keysArray = Object.keys(Object(nextSource));
+				for (var nextIndex = 0, len = keysArray.length; nextIndex < len; nextIndex++) {
+					var nextKey = keysArray[nextIndex];
+					var desc = Object.getOwnPropertyDescriptor(nextSource, nextKey);
+					if (desc !== undefined && desc.enumerable) {
+						to[nextKey] = nextSource[nextKey];
+					}
+				}
+			}
+			return to;
+		}
+	});
+}
+
+var fs = require("fs"),
+	path = require("path"),
+	args = require("minimist")(process.argv,{
+		boolean: [ "recursive" ]
+		string: ["file","dir","base-dir"],
+		aliases: {
+			"recursive": "R"
+		}
+	}),
+	acorn = require("acorn"),
+
+	parse_options = {
+		ecmaVersion: 6,
+		onComment: handleComment
+	},
+
+	dependencies = [],
+	dep_list,
+	current_dependency,
+	recursive = false,
+
+	homedir = process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'],
+	files = [],
+	output = "",
+
+	BASE_DIR = process.cwd()
+;
+
+// verify CLI usage
+if (args.help ||
+	!(
+		args.file ||
+		args.dir
+	)
+) {
+	printHelp();
+	process.exit(1);
+}
+
+// include manually specified files
+if (args.file) {
+	if (!Array.isArray(args.file)) args.file = [args.file];
+	files = files.concat(args.file.map(fixPath));
+}
+
+if (args.dir) {
+	// set directory scan to recursive
+	if (args.recursive) {
+		recursive = true;
+	}
+
+	// include files from any specified directories
+	if (!Array.isArray(args.dir)) args.dir = [args.dir];
+	args.dir.forEach(function eacher(dir){
+		try {
+			dir = fixPath(dir);
+			files = files.concat(
+					fs.readdirSync(dir)
+					.map(function mapper(file){
+						return path.join(dir,file);
+					})
+				);
+		}
+		catch (err) {
+			console.error("Couldn't find directory:", dir);
+			process.exit(1);
+		}
+	});
+}
+
+// scan all files to populate dependencies
+files.forEach(scanFile);
+
+// walk dependency tree for ordering
+dep_list = walkTree(dependencies);
+
+console.log(JSON.stringify(dep_list,["src"],"  "));
+
+// ***********************************
+
+function printHelp() {
+	console.log(
+		"deptree: scan JS files to build dependency tree\n",
+		"(c) 2015 Kyle Simpson | http://getify.mit-license.org/\n",
+		"\n",
+		"usage: scandep opt [, ..opt]\n",
+		"\n",
+		"options:\n",
+		"--help                    show this help\n",
+		"\n",
+		"--file=file               scan a single file\n",
+		"--dir=directory           scan all files in a directory\n",
+		"\n",
+		"--base-dir=directory      resolve relative dependency paths to this path\n",
+		"-R, --recursive           directory scan is recursive\n"
+	);
+}
+
+// from: https://github.com/azer/expand-home-dir
+function expandHomeDir(fpath) {
+	if (!fpath) return fpath;
+	if (fpath == '~') return homedir;
+	if (fpath.slice(0, 2) != '~/') return fpath;
+	return path.join(homedir,fpath.slice(2));
+}
+
+function fixPath(pathStr) {
+	if (!path.isAbsolute(pathStr)) {
+		if (/^~/.test(pathStr)) {
+			pathStr = pathStr.replace(/^~/,function replacer(){
+				return expandHomeDir("~");
+			});
+		}
+		else if (!(new RegExp("^[" + path.sep + "]")).test(pathStr)) {
+			pathStr = path.join(BASE_DIR,pathStr);
+		}
+	}
+	return pathStr;
+}
+
+function scanFile(filepath) {
+	var contents, tokenizer, token;
+
+	// skip non-existent or non-file path
+	try {
+		if (fs.existsSync(filepath)) {
+			var stat = fs.statSync(filepath);
+			if (!stat.isFile()) return;
+		}
+		else return;
+	}
+	catch (err) { return; }
+
+	// find or construct dependency entry
+	if (!(current_dependency = findDependencyEntry(filepath))) {
+		current_dependency = { src: filepath, children: [] };
+		dependencies.push(current_dependency);
+	}
+
+	// skip already scanned file
+	if (current_dependency.scanned) return;
+
+	// only scan each dependency once
+	current_dependency.scanned = true;
+
+	// read file contents
+	contents = fs.readFileSync(filepath,{ encoding: "utf8" });
+
+	try {
+		// prepare tokenizer for file
+		tokenizer = acorn.tokenizer(contents,parse_options);
+	}
+	catch (err) {
+		console.error("Skipping: ", filepath);
+	}
+
+	// consume all tokens so comments are extracted
+	do { token = tokenizer.getToken(); } while (token.type != acorn.tokTypes.eof);
+
+	// scan all discovered dependency files
+	current_dependency.children
+		.map(function mapper(dep){ return dep.src; })
+		.forEach(scanFile);
+}
+
+function findDependencyEntry(filepath) {
+	return dependencies.filter(function filterer(dep){
+		return filepath == dep.src;
+	})[0];
+}
+
+function handleComment(_,text) {
+	var re = /^\s*required?(?:\s*:)?\s*(.*)(?:$|[\r\n])/igm,
+		res, entry, filepath;
+
+	// find all dependency annotation comments
+	while (res = re.exec(text)) {
+		filepath = fixPath(res[1]);
+
+		// find or construct dependency entry
+		if (!(entry = findDependencyEntry(filepath))) {
+			entry = { src: filepath, children: [] };
+			dependencies.push(entry);
+		}
+
+		// link dependency relationship
+		current_dependency.children.push(entry);
+	}
+}
+
+function walkTree(tree) {
+	var nodes = [];
+
+	// depth-first graph nodes traversal
+	tree.forEach(function visit(node) {
+		// adapted from: http://en.wikipedia.org/wiki/Topological_sorting#Algorithms
+		if (node.marked) throw "Cycle!";
+		if (!node.visited) {
+			node.marked = true;
+			if (node.children) {
+				node.children.forEach(function eacher(n){
+					n.parents = n.parents || [];
+					n.parents.push(node);
+					visit(n);
+				});
+			}
+			node.visited = true;
+			delete node.marked;
+			delete node.children;
+			nodes.unshift(node);
+		}
+	});
+
+	// calculate depths
+	nodes.forEach(function eacher(node){
+		node.depth = 0;
+		delete node.visited;
+		if (node.parents) {
+			node.parents.forEach(function eacher(n){
+				node.depth = Math.max(n.depth + 1,node.depth);
+			});
+			delete node.parents;
+		}
+	});
+
+	// sort by depth
+	nodes.sort(function sorter(a,b){
+		return b.depth - a.depth;
+	});
+
+	// group by depth
+	nodes = nodes.slice(1).reduce(function reducer(nodes,node){
+		var prev = nodes[nodes.length-1];
+		if (Array.isArray(prev) && prev[0].depth === node.depth) {
+			prev.push(node);
+		}
+		else if (prev.depth === node.depth) {
+			nodes[nodes.length-1] = [prev,node];
+		}
+		else {
+			nodes.push(node);
+		}
+
+		return nodes;
+	},[nodes[0]]);
+
+	return nodes;
+}
