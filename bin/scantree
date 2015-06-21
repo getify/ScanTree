@@ -39,10 +39,11 @@ if (!Object.assign) {
 var fs = require("fs"),
 	path = require("path"),
 	args = require("minimist")(process.argv,{
-		boolean: [ "recursive" ],
-		string: ["file","dir","base-dir"],
+		boolean: [ "recursive", "full-paths" ],
+		string: [ "file", "dir", "base-dir", "output", "exclude" ],
 		alias: {
-			"recursive": "R"
+			"recursive": "R",
+			"full-paths": "F"
 		}
 	}),
 	acorn = require("acorn"),
@@ -65,14 +66,28 @@ var fs = require("fs"),
 ;
 
 // verify CLI usage
-if (args.help ||
+if (
+	args.help ||
 	!(
 		args.file ||
 		args.dir
+	) ||
+	(
+		args.output &&
+		!(
+			args.output == "simple" ||
+			args.output == "json"
+		)
 	)
 ) {
 	printHelp();
 	process.exit(1);
+}
+
+// normalize exclude argument(s)
+if (!Array.isArray(args.exclude)) {
+	if (args.exclude) args.exclude = [args.exclude];
+	else args.exclude = [];
 }
 
 // include manually specified files
@@ -100,7 +115,10 @@ if (args.dir) {
 					})
 					.filter(function filterer(filepath){
 						try {
-							if (fs.existsSync(filepath)) {
+							if (
+								!isFileExcluded(filepath) &&
+								fs.existsSync(filepath)
+							) {
 								var stat = fs.statSync(filepath);
 								if (stat.isDirectory()) {
 									dirs.push(filepath);
@@ -137,7 +155,19 @@ files.forEach(scanFile);
 // walk dependency tree for ordering
 dep_list = walkTree(dependencies);
 
-console.log(JSON.stringify(dep_list,["src"],"  "));
+if (args.output == "simple") {
+	dep_list.forEach(function eacher(item,idx){
+		if (Array.isArray(item)) item.forEach(eacher);
+		else process.stdout.write(
+			(idx > 0 ? " " : "") +
+			item.src.replace(/(\s)/g,"\\$1")
+		);
+	});
+	process.stdout.write("\n");
+}
+else {
+	console.log(JSON.stringify(dep_list,["src"]));
+}
 
 // ***********************************
 
@@ -153,9 +183,14 @@ function printHelp() {
 		"\n",
 		"--file=file               scan a single file\n",
 		"--dir=directory           scan all files in a directory\n",
+		"--exclude=pattern         exclude any paths matching pattern\n",
 		"\n",
-		"--base-dir=directory      resolve relative dependency paths to this path\n",
-		"-R, --recursive           directory scan is recursive\n"
+		"--base-dir=directory      look for dependency paths relative to this location\n",
+		"-R, --recursive           directory scan is recursive\n",
+		"-F, --full-paths          include full paths in all dependencies; otherwise strip\n",
+		"                          BASE-DIR from paths, if present",
+		"--output=[simple|json]    simple linear list of space-separated values or\n",
+		"                          JSON (with grouping); default: json\n"
 	);
 }
 
@@ -226,6 +261,15 @@ function scanFile(filepath) {
 		.forEach(scanFile);
 }
 
+function isFileExcluded(filepath) {
+	if (args.exclude.length > 0) {
+		return args.exclude.some(function somer(exclude){
+				return (new RegExp(exclude)).test(filepath);
+			});
+	}
+	return false;
+}
+
 function findDependencyEntry(filepath) {
 	return dependencies.filter(function filterer(dep){
 		return filepath == dep.src;
@@ -240,14 +284,16 @@ function handleComment(_,text) {
 	while (res = re.exec(text)) {
 		filepath = fixPath(res[1]);
 
-		// find or construct dependency entry
-		if (!(entry = findDependencyEntry(filepath))) {
-			entry = { src: filepath, children: [] };
-			dependencies.push(entry);
-		}
+		if (!isFileExcluded(filepath)) {
+			// find or construct dependency entry
+			if (!(entry = findDependencyEntry(filepath))) {
+				entry = { src: filepath, children: [] };
+				dependencies.push(entry);
+			}
 
-		// link dependency relationship
-		current_dependency.children.push(entry);
+			// link dependency relationship
+			current_dependency.children.push(entry);
+		}
 	}
 }
 
@@ -284,6 +330,13 @@ function walkTree(tree) {
 			});
 			delete node.parents;
 		}
+
+		// no full paths, so resolve against base-dir
+		if (!args["full-paths"] &&
+			node.src.indexOf(BASE_DIR) === 0
+		) {
+			node.src = node.src.substr(BASE_DIR.length);
+		}
 	});
 
 	// sort by depth
@@ -292,20 +345,22 @@ function walkTree(tree) {
 	});
 
 	// group by depth
-	nodes = nodes.slice(1).reduce(function reducer(nodes,node){
-		var prev = nodes[nodes.length-1];
-		if (Array.isArray(prev) && prev[0].depth === node.depth) {
-			prev.push(node);
-		}
-		else if (prev.depth === node.depth) {
-			nodes[nodes.length-1] = [prev,node];
-		}
-		else {
-			nodes.push(node);
-		}
+	if (nodes.length > 1) {
+		nodes = nodes.slice(1).reduce(function reducer(nodes,node){
+			var prev = nodes[nodes.length-1];
+			if (Array.isArray(prev) && prev[0].depth === node.depth) {
+				prev.push(node);
+			}
+			else if (prev.depth === node.depth) {
+				nodes[nodes.length-1] = [prev,node];
+			}
+			else {
+				nodes.push(node);
+			}
 
-		return nodes;
-	},[nodes[0]]);
+			return nodes;
+		},[nodes[0]]);
+	}
 
 	return nodes;
 }
