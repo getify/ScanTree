@@ -1,6 +1,6 @@
 {
 	"name": "scantree",
-	"version": "0.0.2-a",
+	"version": "0.0.2-b",
 	"description": "scan JS files to build dependency tree",
 	"preferGlobal": true,
 	"scripts": {

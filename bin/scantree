@@ -350,7 +350,7 @@ function findDependencyEntry(filepath) {
 }
 
 function handleComment(_,text) {
-	var re = /^\s*required?(?:\s*:)?\s*(.*)(?:$|[\r\n])/igm,
+	var re = /^\s*require[ds]?(?:\s*:)?\s*(.*)(?:$|[\r\n])/igm,
 		res, entry, filepath;
 
 	// find all dependency annotation comments
@@ -379,7 +379,7 @@ function walkTree(tree) {
 	// depth-first graph nodes traversal
 	tree.forEach(function visit(node) {
 		// adapted from: http://en.wikipedia.org/wiki/Topological_sorting#Algorithms
-		if (node.marked) throw "Cycle!";
+		if (node.marked) QUIT("Circular dependencies not supported: " + node.src,true);
 		if (!node.visited) {
 			node.marked = true;
 			if (node.children) {
