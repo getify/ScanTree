@@ -54,7 +54,7 @@ function printHelp() {
 		"scantree: scan JS files to build dependency tree\n",
 		"(c) 2015 Kyle Simpson | http://getify.mit-license.org/\n",
 		"\n",
-		"usage: scantree [--file|--dir] [, ..opt]\n",
+		"usage: scantree [--file|--dir]=path [opt ...]\n",
 		"\n",
 		"options:\n",
 		"--help                    show this help\n",
@@ -64,7 +64,7 @@ function printHelp() {
 		"--exclude=pattern         exclude any included paths that match pattern (JS regex)\n",
 		"\n",
 		"--base-dir=directory      search relative dependency paths starting from this location\n",
-		"--output=[simple|json]    output simple linear list of space-separated values, or JSON\n",
+		"--output=[simple|json]    output simple linear list of null-separated values, or JSON\n",
 		"                          (default: json)\n",
 		"\n",
 		"-R, --recursive           directory scan is recursive\n",
@@ -141,10 +141,9 @@ function main() {
 	if (args.output === "simple") {
 		dep_list.forEach(function eacher(item){
 			if (Array.isArray(item)) item.forEach(eacher);
-			else output +=
-				(output != "" ? " " : "") +
-				item.src.replace(/(\s)/g,"\\$1");
+			else output += item.src.replace(/(\s)/g,"\\$1") + "\0";
 		});
+		process.stdout.write(output);
 	}
 	else {
 		output = JSON.stringify(dep_list,function replacer(key,value){
@@ -154,9 +153,8 @@ function main() {
 			}
 			else if (key === "src") return value;
 		});
+		console.log(output);
 	}
-
-	console.log(output);
 }
 
 function processParams() {
@@ -243,6 +241,9 @@ function processParams() {
 	if (args["base-dir"]) {
 		BASE_DIR = fixPath(args["base-dir"]);
 	}
+
+	// normalize BASE_DIR
+	if (!/\/$/.test(BASE_DIR)) BASE_DIR += "/";
 }
 
 function fileExists(filepath) {
@@ -420,7 +421,7 @@ function walkTree(tree) {
 	});
 
 	// group parallel dependencies (by depth)?
-	if (args.groups) {
+	if (args.groups && args.output !== "simple") {
 		if (nodes.length > 1) {
 			nodes = nodes.slice(1).reduce(function reducer(nodes,node){
 				var prev = nodes[nodes.length-1];
