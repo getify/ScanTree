@@ -1,0 +1,32 @@
+{
+	"name": "scantree",
+	"version": "0.0.1-a",
+	"description": "scan JS files to build dependency tree",
+	"preferGlobal": true,
+	"scripts": {
+		"test": "node tests.js"
+	},
+	"bin": {
+		"scantree": "./bin/scantree"
+	},
+	"dependencies": {
+		"minimist": "~1.1.1",
+		"acorn": "~2.0.1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/getify/scantree.git"
+	},
+	"keywords": [
+		"dependency",
+		"dependencies",
+		"dependency management"
+	],
+	"bugs": {
+		"url": "https://github.com/getify/scantree/issues",
+		"email": "getify@gmail.com"
+	},
+	"homepage": "http://github.com/getify/scantree",
+	"author": "Kyle Simpson <getify@gmail.com>",
+	"license": "MIT"
+}
