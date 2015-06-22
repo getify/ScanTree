@@ -2,48 +2,26 @@
 
 "use strict";
 
-// From: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
-if (!Object.assign) {
-	Object.defineProperty(Object,"assign",{
-		enumerable: false,
-		configurable: true,
-		writable: true,
-		value: function(target, firstSource) {
-			"use strict";
-			if (target === undefined || target === null) {
-				throw new TypeError('Cannot convert first argument to object');
-			}
-
-			var to = Object(target);
-			for (var i = 1; i < arguments.length; i++) {
-				var nextSource = arguments[i];
-				if (nextSource === undefined || nextSource === null) {
-					continue;
-				}
-				nextSource = Object(nextSource);
-
-				var keysArray = Object.keys(Object(nextSource));
-				for (var nextIndex = 0, len = keysArray.length; nextIndex < len; nextIndex++) {
-					var nextKey = keysArray[nextIndex];
-					var desc = Object.getOwnPropertyDescriptor(nextSource, nextKey);
-					if (desc !== undefined && desc.enumerable) {
-						to[nextKey] = nextSource[nextKey];
-					}
-				}
-			}
-			return to;
-		}
-	});
-}
+// Minified from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
+Object.assign||Object.defineProperty(Object,"assign",{enumerable:!1,configurable:!0,writable:!0,value:function(a){"use strict";if(void 0===a||null===a)throw new TypeError("Cannot convert first argument to object");for(var c=Object(a),d=1;d<arguments.length;d++){var e=arguments[d];if(void 0!==e&&null!==e){e=Object(e);for(var f=Object.keys(Object(e)),g=0,h=f.length;h>g;g++){var i=f[g],j=Object.getOwnPropertyDescriptor(e,i);void 0!==j&&j.enumerable&&(c[i]=e[i])}}}return c}});
 
 var fs = require("fs"),
+	os = require("os"),
 	path = require("path"),
 	args = require("minimist")(process.argv,{
-		boolean: [ "recursive", "full-paths" ],
+		boolean: [ "recursive", "full-paths", "groups" ],
 		string: [ "file", "dir", "base-dir", "output", "exclude" ],
+		default: {
+			"recursive": false,
+			"full-paths": false,
+			"groups": true,
+			"exclude": []
+		},
 		alias: {
 			"recursive": "R",
-			"full-paths": "F"
+			"full-paths": "F",
+			"groups": "G",
+			"no-groups": "N"
 		}
 	}),
 	acorn = require("acorn"),
@@ -53,121 +31,21 @@ var fs = require("fs"),
 		onComment: handleComment
 	},
 
+	files = [],
+	output = "",
 	dependencies = [],
 	dep_list,
 	current_dependency,
-	recursive = false,
 
-	homedir = process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'],
-	files = [],
-	output = "",
-
-	BASE_DIR = process.cwd()
+	BASE_DIR = process.cwd(),
+	HOME_DIR = (
+		os.homedir ?
+			os.homedir() :
+			process.env[(process.platform == "win32") ? "USERPROFILE" : "HOME"]
+	)
 ;
 
-// verify CLI usage
-if (
-	args.help ||
-	!(
-		args.file ||
-		args.dir
-	) ||
-	(
-		args.output &&
-		!(
-			args.output == "simple" ||
-			args.output == "json"
-		)
-	)
-) {
-	printHelp();
-	process.exit(1);
-}
-
-// normalize exclude argument(s)
-if (!Array.isArray(args.exclude)) {
-	if (args.exclude) args.exclude = [args.exclude];
-	else args.exclude = [];
-}
-
-// include manually specified files
-if (args.file) {
-	if (!Array.isArray(args.file)) args.file = [args.file];
-	files = files.concat(args.file.map(fixPath));
-}
-
-if (args.dir) {
-	// set directory scan to recursive
-	if (args.recursive) {
-		recursive = true;
-	}
-
-	// include files from any specified directories
-	if (!Array.isArray(args.dir)) args.dir = [args.dir];
-	args.dir.forEach(function processDirectory(dir){
-		var dirs = [];
-		try {
-			dir = fixPath(dir);
-			files = files.concat(
-				fs.readdirSync(dir)
-					.map(function mapper(file){
-						return path.join(dir,file);
-					})
-					.filter(function filterer(filepath){
-						try {
-							if (
-								!isFileExcluded(filepath) &&
-								fs.existsSync(filepath)
-							) {
-								var stat = fs.statSync(filepath);
-								if (stat.isDirectory()) {
-									dirs.push(filepath);
-									return false;
-								}
-								return true;
-							}
-						}
-						catch (err) { }
-						return false;
-					})
-			);
-
-			// recurse into any sub-directories found
-			if (recursive) {
-				dirs.forEach(processDirectory);
-			}
-		}
-		catch (err) {
-			console.error("Couldn't find directory:", dir);
-			process.exit(1);
-		}
-	});
-}
-
-// set dir for resolving relative paths
-if (args["base-dir"]) {
-	BASE_DIR = fixPath(args["base-dir"]);
-}
-
-// scan all files to populate dependencies
-files.forEach(scanFile);
-
-// walk dependency tree for ordering
-dep_list = walkTree(dependencies);
-
-if (args.output == "simple") {
-	dep_list.forEach(function eacher(item,idx){
-		if (Array.isArray(item)) item.forEach(eacher);
-		else process.stdout.write(
-			(idx > 0 ? " " : "") +
-			item.src.replace(/(\s)/g,"\\$1")
-		);
-	});
-	process.stdout.write("\n");
-}
-else {
-	console.log(JSON.stringify(dep_list,["src"]));
-}
+main();
 
 // ***********************************
 
@@ -176,30 +54,224 @@ function printHelp() {
 		"scantree: scan JS files to build dependency tree\n",
 		"(c) 2015 Kyle Simpson | http://getify.mit-license.org/\n",
 		"\n",
-		"usage: scandep opt [, ..opt]\n",
+		"usage: scantree [--file|--dir] [, ..opt]\n",
 		"\n",
 		"options:\n",
 		"--help                    show this help\n",
 		"\n",
 		"--file=file               scan a single file\n",
 		"--dir=directory           scan all files in a directory\n",
-		"--exclude=pattern         exclude any paths matching pattern\n",
+		"--exclude=pattern         exclude any included paths that match pattern (JS regex)\n",
 		"\n",
-		"--base-dir=directory      look for dependency paths relative to this location\n",
+		"--base-dir=directory      search relative dependency paths starting from this location\n",
+		"--output=[simple|json]    output simple linear list of space-separated values, or JSON\n",
+		"                          (default: json)\n",
+		"\n",
 		"-R, --recursive           directory scan is recursive\n",
+		"                          (default: off)\n",
 		"-F, --full-paths          include full paths in all dependencies; otherwise strip\n",
-		"                          BASE-DIR from paths, if present",
-		"--output=[simple|json]    simple linear list of space-separated values or\n",
-		"                          JSON (with grouping); default: json\n"
+		"                          BASE-DIR from paths\n",
+		"                          (default: off)\n",
+		"-G, --groups              group parallel dependencies -- those which don't depend on\n",
+		"                          each other and can thus run in arbitrary order\n",
+		"                          (JSON only, default: on)\n",
+		"-N, --no-groups           don't group parallel dependencies\n",
+		"                          (JSON only)\n"
 	);
+}
+
+function validateParams() {
+	if (args.help) {
+		QUIT();
+	}
+	else if (!(
+			"file" in args ||
+			"dir" in args
+	)) {
+		QUIT("Required: '--file' or '--dir'");
+	}
+	else if (
+		"base-dir" in args &&
+		(
+			args["base-dir"] === "" ||
+			Array.isArray(args["base-dir"])
+		)
+	) {
+		QUIT("'--base-dir' if present must appear only once and must specify a non-empty value");
+	}
+	else if (
+		"recursive" in args &&
+		typeof args.recursive != "boolean"
+	) {
+		QUIT("'--recursive (-R)' should have no assigned value");
+	}
+	else if (
+		"full-paths" in args &&
+		typeof args["full-paths"] != "boolean"
+	) {
+		QUIT("'--full-paths (-F)' should have no assigned value");
+	}
+	else if (
+		args.output &&
+		!(
+			args.output === "simple" ||
+			args.output === "json"
+		)
+	) {
+		QUIT("'--output' if present must appear only once and be either 'simple' or 'json'");
+	}
+	else if (
+		"groups" in args &&
+		typeof args["groups"] != "boolean"
+	) {
+		QUIT("'--groups (-G)' should have no assigned value");
+	}
+}
+
+function main() {
+	processParams();
+
+	// scan all files to populate dependencies
+	files.forEach(scanFile);
+
+	// walk dependency tree for ordering
+	dep_list = walkTree(dependencies);
+
+	// handle output options
+	if (args.output === "simple") {
+		dep_list.forEach(function eacher(item){
+			if (Array.isArray(item)) item.forEach(eacher);
+			else output +=
+				(output != "" ? " " : "") +
+				item.src.replace(/(\s)/g,"\\$1");
+		});
+	}
+	else {
+		output = JSON.stringify(dep_list,function replacer(key,value){
+			if (typeof value == "object") {
+				if (Array.isArray(value)) return value;
+				return value.src;
+			}
+			else if (key === "src") return value;
+		});
+	}
+
+	console.log(output);
+}
+
+function processParams() {
+	// fix -N ==> --no-groups
+	// (https://github.com/substack/minimist/issues/55)
+	if (args.N) {
+		delete args.N;
+		delete args["no-groups"];
+		args.groups = args.G = false;
+	}
+
+	// verify CLI usage
+	validateParams();
+
+	// normalize exclude argument(s), if any
+	if (!Array.isArray(args.exclude)) {
+		args.exclude = [args.exclude];
+	}
+
+	// include manually specified files
+	if (args.file) {
+		// normalize --file
+		if (!Array.isArray(args.file)) args.file = [args.file];
+
+		// verify --file is specified correctly
+		if (~args.file.indexOf("")) {
+			QUIT("Required: '--file' if present must specify a non-empty value");
+		}
+
+		// include specified files
+		files = files.concat(args.file.map(fixPath));
+	}
+
+	if (args.dir) {
+		// normalize --dir
+		if (!Array.isArray(args.dir)) args.dir = [args.dir];
+
+		// verify --dir is specified correctly
+		if (~args.dir.indexOf("")) {
+			QUIT("Required: '--dir' if present must specify a non-empty value");
+		}
+
+		// include files from any specified directories
+		args.dir.forEach(function processDirectory(dir){
+			var dirs = [];
+			try {
+				dir = fixPath(dir);
+				files = files.concat(
+					fs.readdirSync(dir)
+						.map(function mapper(file){
+							return path.join(dir,file);
+						})
+						.filter(function filterer(filepath){
+							try {
+								if (
+									!isFileExcluded(filepath) &&
+									fileExists(filepath)
+								) {
+									var stat = fs.statSync(filepath);
+									if (stat.isDirectory()) {
+										dirs.push(filepath);
+										return false;
+									}
+									return true;
+								}
+							}
+							catch (err) { }
+							return false;
+						})
+				);
+
+				// recurse into any sub-directories found
+				if (args.recursive) {
+					dirs.forEach(processDirectory);
+				}
+			}
+			catch (err) {
+				QUIT("Directory not found: " + dir,true);
+			}
+		});
+	}
+
+	// set dir for resolving relative paths
+	if (args["base-dir"]) {
+		BASE_DIR = fixPath(args["base-dir"]);
+	}
+}
+
+function fileExists(filepath) {
+	try {
+		if (fs.existsSync(filepath)) {
+			return true;
+		}
+	}
+	catch (err) { }
+	return false;
+}
+
+function QUIT(fatal,hideHelp) {
+	if (fatal) {
+		console.error(fatal);
+		console.error("");
+	}
+	if (!hideHelp) {
+		printHelp();
+	}
+	process.exit(fatal ? 1 : 0);
 }
 
 // from: https://github.com/azer/expand-home-dir
 function expandHomeDir(fpath) {
 	if (!fpath) return fpath;
-	if (fpath == '~') return homedir;
+	if (fpath == '~') return HOME_DIR;
 	if (fpath.slice(0, 2) != '~/') return fpath;
-	return path.join(homedir,fpath.slice(2));
+	return path.join(HOME_DIR,fpath.slice(2));
 }
 
 function fixPath(pathStr) {
@@ -284,7 +356,10 @@ function handleComment(_,text) {
 	while (res = re.exec(text)) {
 		filepath = fixPath(res[1]);
 
-		if (!isFileExcluded(filepath)) {
+		if (
+			!isFileExcluded(filepath) &&
+			fileExists(filepath)
+		) {
 			// find or construct dependency entry
 			if (!(entry = findDependencyEntry(filepath))) {
 				entry = { src: filepath, children: [] };
@@ -344,22 +419,24 @@ function walkTree(tree) {
 		return b.depth - a.depth;
 	});
 
-	// group by depth
-	if (nodes.length > 1) {
-		nodes = nodes.slice(1).reduce(function reducer(nodes,node){
-			var prev = nodes[nodes.length-1];
-			if (Array.isArray(prev) && prev[0].depth === node.depth) {
-				prev.push(node);
-			}
-			else if (prev.depth === node.depth) {
-				nodes[nodes.length-1] = [prev,node];
-			}
-			else {
-				nodes.push(node);
-			}
+	// group parallel dependencies (by depth)?
+	if (args.groups) {
+		if (nodes.length > 1) {
+			nodes = nodes.slice(1).reduce(function reducer(nodes,node){
+				var prev = nodes[nodes.length-1];
+				if (Array.isArray(prev) && prev[0].depth === node.depth) {
+					prev.push(node);
+				}
+				else if (prev.depth === node.depth) {
+					nodes[nodes.length-1] = [prev,node];
+				}
+				else {
+					nodes.push(node);
+				}
 
-			return nodes;
-		},[nodes[0]]);
+				return nodes;
+			},[nodes[0]]);
+		}
 	}
 
 	return nodes;
