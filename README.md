@@ -52,6 +52,8 @@ All of these are valid examples of dependency annotations the scanner will ident
 
 Dependency annotations can appear anywhere in valid JS syntax, but it's recommended for clarity that they appear at or near the top of the JS file.
 
+**Note:** HTTP/S URLs (or `//domain.tld` protocol-relative URLs) *can* be annotated as dependencies, but they are not fetched/scanned for their own dependencies; they're just added to the dependency tree.
+
 #### Relative Paths
 
 If you use a relative path in a dependency annotation, it is *not* considered relative to that file's location, but rather relative to the *base directory* of the scan.
@@ -116,7 +118,11 @@ options:
                           (JSON only)
 ```
 
-You specify file(s) to scan by using one or more `--file` and/or `--dir` flags. If you use `--dir`, that directory's contents will be examined (non-recursively), and all found JS files will be scanned. Use `--recursive (-R)` to recursively examine sub-directories. To exclude any files/paths from this processing, use one or more `--exclude` flags, specifying a JS-style regular expression to match for exclusion (note: to avoid shell escaping issues, surround your regex in ' ' quotes).
+You specify file(s) to scan by using one or more `--file` and/or `--dir` flags.
+
+**Note:** HTTP/S URLs (or `//domain.tld` protocol-relative URLs) *can* be added to the dependency tree via `--file`, but are not fetched/scanned for their own dependencies.
+
+If you use `--dir`, that directory's contents will be examined (non-recursively), and all found JS files will be scanned. Use `--recursive (-R)` to recursively examine sub-directories. To exclude any files/paths from this processing, use one or more `--exclude` flags, specifying a JS-style regular expression to match for exclusion (note: to avoid shell escaping issues, surround your regex in ' ' quotes).
 
 All dependency annotations with relative filepaths will default to resolving against the current directory where the tool is being invoked. If you want to set a different base directory, use `--base-dir`. By default, all paths that are relative to the base directory (default or specified) will be output as relative (base directory trimmed). To output full filepaths instead, use `--full-paths (-F)`.
 

@@ -195,7 +195,7 @@ function main() {
 
 			ignore: {
 				invalid: true,
-				missing: true
+				missing: false
 			}
 		});
 		process.stdout.write(output);
