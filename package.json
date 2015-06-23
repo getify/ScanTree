@@ -1,6 +1,6 @@
 {
 	"name": "scantree",
-	"version": "0.0.3-b",
+	"version": "0.0.4-a",
 	"description": "Scan JS file tree to build an ordered and grouped dependency listing",
 	"main": "lib/index.js",
 	"scripts": {
