@@ -2,12 +2,7 @@
 
 "use strict";
 
-// Minified from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
-Object.assign||Object.defineProperty(Object,"assign",{enumerable:!1,configurable:!0,writable:!0,value:function(a){"use strict";if(void 0===a||null===a)throw new TypeError("Cannot convert first argument to object");for(var c=Object(a),d=1;d<arguments.length;d++){var e=arguments[d];if(void 0!==e&&null!==e){e=Object(e);for(var f=Object.keys(Object(e)),g=0,h=f.length;h>g;g++){var i=f[g],j=Object.getOwnPropertyDescriptor(e,i);void 0!==j&&j.enumerable&&(c[i]=e[i])}}}return c}});
-
-var fs = require("fs"),
-	os = require("os"),
-	path = require("path"),
+var path = require("path"),
 	args = require("minimist")(process.argv,{
 		boolean: [ "recursive", "full-paths", "groups" ],
 		string: [ "file", "dir", "base-dir", "output", "exclude" ],
@@ -24,25 +19,7 @@ var fs = require("fs"),
 			"no-groups": "N"
 		}
 	}),
-	acorn = require("acorn"),
-
-	parse_options = {
-		ecmaVersion: 6,
-		onComment: handleComment
-	},
-
-	files = [],
-	output = "",
-	dependencies = [],
-	dep_list,
-	current_dependency,
-
-	BASE_DIR = process.cwd(),
-	HOME_DIR = (
-		os.homedir ?
-			os.homedir() :
-			process.env[(process.platform == "win32") ? "USERPROFILE" : "HOME"]
-	)
+	scantree = require(path.join(__dirname,"..","lib","index.js"))
 ;
 
 main();
@@ -91,25 +68,73 @@ function validateParams() {
 		QUIT("Required: '--file' or '--dir'");
 	}
 	else if (
+		args.file != null &&
+		(
+			args.file === "" ||
+			(
+				typeof args.file != "string" &&
+				!Array.isArray(args.file)
+			) ||
+			(
+				Array.isArray(args.file) &&
+				~args.file.indexOf("")
+			)
+		)
+	) {
+		QUIT("Each '--file' must specify a non-empty value");
+	}
+	else if (
+		args.dir != null &&
+		(
+			args.dir === "" ||
+			(
+				typeof args.dir != "string" &&
+				!Array.isArray(args.dir)
+			) ||
+			(
+				Array.isArray(args.dir) &&
+				~args.dir.indexOf("")
+			)
+		)
+	) {
+		QUIT("Each '--dir' must specify a non-empty value");
+	}
+	else if (
+		args.exclude != null &&
+		(
+			args.exclude === "" ||
+			(
+				typeof args.exclude != "string" &&
+				!Array.isArray(args.exclude)
+			) ||
+			(
+				Array.isArray(args.exclude) &&
+				~args.exclude.indexOf("")
+			)
+		)
+	) {
+		QUIT("Each '--exclude' must specify a non-empty value");
+	}
+	else if (
 		"base-dir" in args &&
 		(
 			args["base-dir"] === "" ||
-			Array.isArray(args["base-dir"])
+			typeof args["base-dir"] != "string"
 		)
 	) {
-		QUIT("'--base-dir' if present must appear only once and must specify a non-empty value");
+		QUIT("'--base-dir' must be included only once and must specify a non-empty value");
 	}
 	else if (
 		"recursive" in args &&
 		typeof args.recursive != "boolean"
 	) {
-		QUIT("'--recursive (-R)' should have no assigned value");
+		QUIT("'--recursive (-R)' must have no value");
 	}
 	else if (
 		"full-paths" in args &&
 		typeof args["full-paths"] != "boolean"
 	) {
-		QUIT("'--full-paths (-F)' should have no assigned value");
+		QUIT("'--full-paths (-F)' must have no value");
 	}
 	else if (
 		args.output &&
@@ -118,42 +143,13 @@ function validateParams() {
 			args.output === "json"
 		)
 	) {
-		QUIT("'--output' if present must appear only once and be either 'simple' or 'json'");
+		QUIT("'--output' must be included only once and be either 'simple' or 'json'");
 	}
 	else if (
 		"groups" in args &&
 		typeof args["groups"] != "boolean"
 	) {
-		QUIT("'--groups (-G)' should have no assigned value");
-	}
-}
-
-function main() {
-	processParams();
-
-	// scan all files to populate dependencies
-	files.forEach(scanFile);
-
-	// walk dependency tree for ordering
-	dep_list = walkTree(dependencies);
-
-	// handle output options
-	if (args.output === "simple") {
-		dep_list.forEach(function eacher(item){
-			if (Array.isArray(item)) item.forEach(eacher);
-			else output += item.src.replace(/(\s)/g,"\\$1") + "\0";
-		});
-		process.stdout.write(output);
-	}
-	else {
-		output = JSON.stringify(dep_list,function replacer(key,value){
-			if (typeof value == "object") {
-				if (Array.isArray(value)) return value;
-				return value.src;
-			}
-			else if (key === "src") return value;
-		});
-		console.log(output);
+		QUIT("'--groups (-G)' must have no value");
 	}
 }
 
@@ -168,92 +164,6 @@ function processParams() {
 
 	// verify CLI usage
 	validateParams();
-
-	// normalize exclude argument(s), if any
-	if (!Array.isArray(args.exclude)) {
-		args.exclude = [args.exclude];
-	}
-
-	// include manually specified files
-	if (args.file) {
-		// normalize --file
-		if (!Array.isArray(args.file)) args.file = [args.file];
-
-		// verify --file is specified correctly
-		if (~args.file.indexOf("")) {
-			QUIT("Required: '--file' if present must specify a non-empty value");
-		}
-
-		// include specified files
-		files = files.concat(args.file.map(fixPath));
-	}
-
-	if (args.dir) {
-		// normalize --dir
-		if (!Array.isArray(args.dir)) args.dir = [args.dir];
-
-		// verify --dir is specified correctly
-		if (~args.dir.indexOf("")) {
-			QUIT("Required: '--dir' if present must specify a non-empty value");
-		}
-
-		// include files from any specified directories
-		args.dir.forEach(function processDirectory(dir){
-			var dirs = [];
-			try {
-				dir = fixPath(dir);
-				files = files.concat(
-					fs.readdirSync(dir)
-						.map(function mapper(file){
-							return path.join(dir,file);
-						})
-						.filter(function filterer(filepath){
-							try {
-								if (
-									!isFileExcluded(filepath) &&
-									fileExists(filepath)
-								) {
-									var stat = fs.statSync(filepath);
-									if (stat.isDirectory()) {
-										dirs.push(filepath);
-										return false;
-									}
-									return true;
-								}
-							}
-							catch (err) { }
-							return false;
-						})
-				);
-
-				// recurse into any sub-directories found
-				if (args.recursive) {
-					dirs.forEach(processDirectory);
-				}
-			}
-			catch (err) {
-				QUIT("Directory not found: " + dir,true);
-			}
-		});
-	}
-
-	// set dir for resolving relative paths
-	if (args["base-dir"]) {
-		BASE_DIR = fixPath(args["base-dir"]);
-	}
-
-	// normalize BASE_DIR
-	if (!/\/$/.test(BASE_DIR)) BASE_DIR += "/";
-}
-
-function fileExists(filepath) {
-	try {
-		if (fs.existsSync(filepath)) {
-			return true;
-		}
-	}
-	catch (err) { }
-	return false;
 }
 
 function QUIT(fatal,hideHelp) {
@@ -267,178 +177,30 @@ function QUIT(fatal,hideHelp) {
 	process.exit(fatal ? 1 : 0);
 }
 
-// from: https://github.com/azer/expand-home-dir
-function expandHomeDir(fpath) {
-	if (!fpath) return fpath;
-	if (fpath == '~') return HOME_DIR;
-	if (fpath.slice(0, 2) != '~/') return fpath;
-	return path.join(HOME_DIR,fpath.slice(2));
-}
+function main() {
+	var output;
 
-function fixPath(pathStr) {
-	if (!path.isAbsolute(pathStr)) {
-		if (/^~/.test(pathStr)) {
-			pathStr = pathStr.replace(/^~/,function replacer(){
-				return expandHomeDir("~");
-			});
-		}
-		else if (!(new RegExp("^[" + path.sep + "]")).test(pathStr)) {
-			pathStr = path.join(BASE_DIR,pathStr);
-		}
-	}
-	return pathStr;
-}
-
-function scanFile(filepath) {
-	var contents, tokenizer, token;
-
-	// skip non-existent or non-file path
-	try {
-		if (fs.existsSync(filepath)) {
-			var stat = fs.statSync(filepath);
-			if (!stat.isFile()) return;
-		}
-		else return;
-	}
-	catch (err) { return; }
-
-	// find or construct dependency entry
-	if (!(current_dependency = findDependencyEntry(filepath))) {
-		current_dependency = { src: filepath, children: [] };
-		dependencies.push(current_dependency);
-	}
-
-	// skip already scanned file
-	if (current_dependency.scanned) return;
-
-	// only scan each dependency once
-	current_dependency.scanned = true;
-
-	// read file contents
-	contents = fs.readFileSync(filepath,{ encoding: "utf8" });
+	processParams();
 
 	try {
-		// prepare tokenizer for file
-		tokenizer = acorn.tokenizer(contents,parse_options);
+		output = scantree.scan({
+			files: args.file,
+			dirs: args.dir,
+			excludes: args.exclude,
+			base_dir: args["base-dir"],
+			output: args.output,
+			recursive: args.recursive,
+			full_paths: args["full-paths"],
+			groups: args.groups,
+
+			ignore: {
+				invalid: true,
+				missing: true
+			}
+		});
+		process.stdout.write(output);
 	}
 	catch (err) {
-		console.error("Skipping: ", filepath);
+		QUIT(err.message);
 	}
-
-	// consume all tokens so comments are extracted
-	do { token = tokenizer.getToken(); } while (token.type != acorn.tokTypes.eof);
-
-	// scan all discovered dependency files
-	current_dependency.children
-		.map(function mapper(dep){ return dep.src; })
-		.forEach(scanFile);
-}
-
-function isFileExcluded(filepath) {
-	if (args.exclude.length > 0) {
-		return args.exclude.some(function somer(exclude){
-				return (new RegExp(exclude)).test(filepath);
-			});
-	}
-	return false;
-}
-
-function findDependencyEntry(filepath) {
-	return dependencies.filter(function filterer(dep){
-		return filepath == dep.src;
-	})[0];
-}
-
-function handleComment(_,text) {
-	var re = /^\s*require[ds]?(?:\s*:)?\s*(.*)(?:$|[\r\n])/igm,
-		res, entry, filepath;
-
-	// find all dependency annotation comments
-	while (res = re.exec(text)) {
-		filepath = fixPath(res[1]);
-
-		if (
-			!isFileExcluded(filepath) &&
-			fileExists(filepath)
-		) {
-			// find or construct dependency entry
-			if (!(entry = findDependencyEntry(filepath))) {
-				entry = { src: filepath, children: [] };
-				dependencies.push(entry);
-			}
-
-			// link dependency relationship
-			current_dependency.children.push(entry);
-		}
-	}
-}
-
-function walkTree(tree) {
-	var nodes = [];
-
-	// depth-first graph nodes traversal
-	tree.forEach(function visit(node) {
-		// adapted from: http://en.wikipedia.org/wiki/Topological_sorting#Algorithms
-		if (node.marked) QUIT("Circular dependencies not supported: " + node.src,true);
-		if (!node.visited) {
-			node.marked = true;
-			if (node.children) {
-				node.children.forEach(function eacher(n){
-					n.parents = n.parents || [];
-					n.parents.push(node);
-					visit(n);
-				});
-			}
-			node.visited = true;
-			delete node.marked;
-			delete node.children;
-			nodes.unshift(node);
-		}
-	});
-
-	// calculate depths
-	nodes.forEach(function eacher(node){
-		node.depth = 0;
-		delete node.visited;
-		if (node.parents) {
-			node.parents.forEach(function eacher(n){
-				node.depth = Math.max(n.depth + 1,node.depth);
-			});
-			delete node.parents;
-		}
-
-		// no full paths, so resolve against base-dir
-		if (!args["full-paths"] &&
-			node.src.indexOf(BASE_DIR) === 0
-		) {
-			node.src = node.src.substr(BASE_DIR.length);
-		}
-	});
-
-	// sort by depth
-	nodes.sort(function sorter(a,b){
-		return b.depth - a.depth;
-	});
-
-	// group parallel dependencies (by depth)?
-	if (args.groups && args.output !== "simple") {
-		if (nodes.length > 1) {
-			nodes = nodes.slice(1).reduce(function reducer(nodes,node){
-				var prev = nodes[nodes.length-1];
-				if (Array.isArray(prev) && prev[0].depth === node.depth) {
-					prev.push(node);
-				}
-				else if (prev.depth === node.depth) {
-					nodes[nodes.length-1] = [prev,node];
-				}
-				else {
-					nodes.push(node);
-				}
-
-				return nodes;
-			},[nodes[0]]);
-		}
-	}
-
-	return nodes;
 }

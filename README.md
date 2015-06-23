@@ -24,6 +24,10 @@ Also, some dependencies may be "parallel", in that they don't need to run in any
 
 ## Documentation
 
+This tool can either be used as a CLI tool or as a node module.
+
+### CLI
+
 ```
 usage: scantree [--file|--dir]=path [opt ...]
 
@@ -60,12 +64,43 @@ By default, the JSON representation will [group "parallel" dependencies](#json-o
 
 To disable this grouping, use `--no-groups (-N)`. Grouping is also disabled with `--output=simple`.
 
+### Node Module
+
+To use this tool from JS:
+
+```js
+var scantree = require("scantree"),
+    output = scantree.scan({ ..options.. });
+```
+
+The `options` correspond similarly to the [CLI parameters](#cli) described above:
+
+* `files` (`string`, `array`): specifies file(s) to scan
+* `dirs` (`string`, `array`): specifies director(ies) of file(s) to scan
+* `excludes` (`string`, `array`): specifies exclusion pattern(s)
+* `base_dir` (`string`): specifies the base directory for relative dependency paths
+* `output` (`string`: `"simple"`, `"json"`): specifies the output format
+* `recursive` (`boolean`, default: `false`): make directory scans recursive
+* `full_paths` (`boolean`, default: `false`): include full paths for dependencies
+* `groups` (`boolean`, default: `true`): group "parallel" dependencies in JSON output
+* `ignore` (`object`):
+  - `ignore.invalid` (`boolean`): ignore files where the scan fails
+  - `ignore.missing` (`boolean`): ignore files or directories not found
+
+**Note:** `files`, `dirs`, and `excludes` are all plurally named as options, but singularly named as [CLI parameters](#cli).
+
 ## Installation
 
-It's recommended that you install this tool globally with `npm`:
+To use the CLI, it's recommended that you install this tool globally with `npm`:
 
 ```
 npm install -g scantree
+```
+
+To use the library from JS, install as a normal package via `npm`:
+
+```
+npm install scantree
 ```
 
 If you instead pull the files from github, make sure to run `npm install` from inside the directory to install its dependencies, and then link the `bin/scantree` script to a suitable executable path for your system.

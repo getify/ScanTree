@@ -1,8 +1,8 @@
 {
 	"name": "scantree",
-	"version": "0.0.2-b",
+	"version": "0.0.3-a",
 	"description": "scan JS files to build dependency tree",
-	"preferGlobal": true,
+	"main": "lib/index.js",
 	"scripts": {
 		"test": "node tests.js"
 	},
