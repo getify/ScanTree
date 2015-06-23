@@ -1,7 +1,7 @@
 {
 	"name": "scantree",
-	"version": "0.0.3-a",
-	"description": "scan JS files to build dependency tree",
+	"version": "0.0.3-b",
+	"description": "Scan JS file tree to build an ordered and grouped dependency listing",
 	"main": "lib/index.js",
 	"scripts": {
 		"test": "node tests.js"

@@ -1,6 +1,6 @@
 # ScanTree
 
-Scan JS files to build dependency tree.
+Scan JS file tree to build an ordered and grouped dependency listing.
 
 ## Why
 
@@ -24,7 +24,69 @@ Also, some dependencies may be "parallel", in that they don't need to run in any
 
 ## Documentation
 
-This tool can either be used as a CLI tool or as a node module.
+*ScanTree* can either be used as a [CLI tool](#cli) or as a [node module](#node-module).
+
+### Dependency Annotations
+
+Dependency annotations should be a regular JS-style comment, and should appear alone on their own line. The signifier must be `require`, `required`, or `requires`, and can optionally have a `:` before listing the path (everything else to the end of the line, not including the terminating character).
+
+All of these are valid examples of dependency annotations the scanner will identify:
+
+```js
+// require foo/bar/d.js
+// require: foo/bar/d.js
+// requires: foo/bar/d.js
+// required: foo/bar/d.js
+
+/*
+  some comment text
+
+  requires: foo/bar/d.js
+  requires: a.js
+
+  more comment text
+
+  requires: i.js
+*/
+```
+
+Dependency annotations can appear anywhere in valid JS syntax, but it's recommended for clarity that they appear at or near the top of the JS file.
+
+#### Relative Paths
+
+If you use a relative path in a dependency annotation, it is *not* considered relative to that file's location, but rather relative to the *base directory* of the scan.
+
+By default the *base directory* is the current working directory you invoke the [CLI tool](#cli) or the [scantree lib](#node-module). You can override this default *base directory* with the `--base-dir` CLI flag or the `base_dir` lib option.
+
+For example, consider this directory structure :
+
+```
+/tmp/hello/a.js
+/tmp/hello/foo/
+    b.js
+    c.js
+    bar/
+        d.js
+```
+
+If the *base directory* is set to `/tmp/hello/` and `d.js` needs to depend on `c.js`, the annotation in `d.js` should be:
+
+```js
+// BEST:
+// requires: foo/c.js
+
+// OR:
+// requires: /tmp/hello/foo/c.js
+
+// NOT:
+// requires: ../c.js
+```
+
+It's strongly recommended you use *base directory*-relative paths instead of absolute file paths. If you plan to use the individual file paths in URLs for client-side loading, absolute file paths won't be appropriate. If you want to use full file paths server-side, you can simply turn on the *full_paths* option (aka `--full-paths`).
+
+Keeping your annotations relative instead of absolute generally makes for cleaner dependency management as your project grows and changes.
+
+The reason all relative dependency paths are relative to the *base directory* instead of each other is to prevent having to update all your relative paths in a file if you need to move that file to a different location in the tree (of course, any annotations referencing *that* file will need to be updated!).
 
 ### CLI
 
@@ -167,12 +229,14 @@ From the [test suite](#tests), here's some example commands and their outputs:
 
 ### JSON Output
 
+From the CLI:
+
 ```
 scantree --dir=test/ --base-dir=test/ --recursive
 [["baz/f.js","e.js"],"foo/c.js",["foo/bar/d.js","foo/b.js"],"a.js",["baz/bam/g.js","i.js"],"baz/bam/h.js"]
 ```
 
-And that JSON prettified to illustrate:
+And prettifying that JSON to illustrate the structure:
 
 ```js
 [
@@ -196,6 +260,22 @@ And that JSON prettified to illustrate:
 
 This example shows several "parallel" groups, like the one containing `baz/f.js` and `e.js`. That means the annotated dependency relationships imply that either of those two can run first, but both need to run before the next file `foo/c.js` runs, and so on.
 
+The lib usage equivalent of the above CLI command is:
+
+```js
+var scantree = require("scantree"),
+    output = scantree.scan({
+        dirs: "test/",
+        base_dir: "test/",
+        recursive: true
+    });
+
+console.log(output);
+// [["baz/f.js","e.js"],"foo/c.js",["foo/bar/d.js","foo/b.js"],"a.js",["baz/bam/g.js","i.js"],"baz/bam/h.js"]
+```
+
+**Note:** This default `"json"` output format is a string of JSON content. If you want the actual `array` structure, you'll need to pass `output` to `JSON.parse(..)` -- see below.
+
 ### Simple Output
 
 And to illustrate simple (non-JSON) output:
@@ -205,10 +285,11 @@ scantree --dir=test/ --base-dir=test/ --recursive --output=simple
 baz/f.jse.jsfoo/c.jsfoo/bar/d.jsfoo/b.jsa.jsbaz/bam/g.jsi.jsbaz/bam/h.js
 ```
 
-This output format is useful for `xargs`. For example, to concat all the files in their proper order (to generate a concatenated file), run:
+This output format is specifically useful for piping to `xargs`. For example, to concat all the files in their proper order (to generate a single concatenated file), run:
 
 ```
 scantree --dir=test/ --base-dir=test/ --recursive --output=simple | xargs -0 -I % echo test/% | xargs -L 1 cat
+
 console.log("f");
 console.log("e");
 // require: e.js
@@ -238,6 +319,54 @@ console.log("h");
 ```
 
 **Note:** The `xargs -0 -I % echo test/%` command takes all the null-terminated paths from *ScanTree* and prints them out one-per-line with `test/` in front of them (`test/foo/b.js` instead of `foo/b.js`). The `xargs -L 1 cat` takes each line and passes it to `cat` to print out that file's contents.
+
+The lib usage equivalent of the above CLI command is:
+
+```js
+var scantree = require("scantree"),
+    output = scantree.scan({
+        dirs: "test/",
+        base_dir: "test/",
+        recursive: true,
+        output: "simple"
+    });
+
+console.log( output.split("\0").slice(0,-1) );
+// [ 'baz/f.js',
+//   'e.js',
+//   'foo/c.js',
+//   'foo/bar/d.js',
+//   'foo/b.js',
+//   'a.js',
+//   'baz/bam/g.js',
+//   'i.js',
+//   'baz/bam/h.js' ]
+```
+
+**Note:** If you just print out the `output` value from the `"simple"` formatting, most JS engines will stop printing at the first `"\0"` value, which may likely cause confusion in your debugging. That's why the above snippet splits on the `"\0"` character and slices off the final resulting `''` element.
+
+But an easier way to get that same result is:
+
+```js
+var scantree = require("scantree"),
+    output = scantree.scan({
+        dirs: "test/",
+        base_dir: "test/",
+        recursive: true,
+        groups: false
+    });
+
+console.log( JSON.parse(output) );
+// [ 'baz/f.js',
+//   'e.js',
+//   'foo/c.js',
+//   'foo/bar/d.js',
+//   'foo/b.js',
+//   'a.js',
+//   'baz/bam/g.js',
+//   'i.js',
+//   'baz/bam/h.js' ]
+```
 
 ## License
 
