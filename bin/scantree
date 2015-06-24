@@ -4,7 +4,7 @@
 
 var path = require("path"),
 	args = require("minimist")(process.argv,{
-		boolean: [ "recursive", "full-paths", "groups" ],
+		boolean: [ "recursive", "full-paths", "groups", "ignore-missing", "ignore-invalid" ],
 		string: [ "file", "dir", "base-dir", "output", "exclude" ],
 		default: {
 			"recursive": false,
@@ -16,7 +16,9 @@ var path = require("path"),
 			"recursive": "R",
 			"full-paths": "F",
 			"groups": "G",
-			"no-groups": "N"
+			"no-groups": "N",
+			"ignore-missing": "M",
+			"ignore-invalid": "I"
 		}
 	}),
 	scantree = require(path.join(__dirname,"..","lib","index.js"))
@@ -28,12 +30,12 @@ main();
 
 function printHelp() {
 	console.log(
-		"scantree: scan JS files to build dependency tree\n",
+		"scantree: scan a JS file tree to build an ordered and grouped dependency listing\n",
 		"(c) 2015 Kyle Simpson | http://getify.mit-license.org/\n",
 		"\n",
 		"usage: scantree [--file|--dir]=path [opt ...]\n",
 		"\n",
-		"options:\n",
+		"Options:\n",
 		"--help                    show this help\n",
 		"\n",
 		"--file=file               scan a single file\n",
@@ -53,7 +55,9 @@ function printHelp() {
 		"                          each other and can thus run in arbitrary order\n",
 		"                          (JSON only, default: on)\n",
 		"-N, --no-groups           don't group parallel dependencies\n",
-		"                          (JSON only)\n"
+		"                          (JSON only)\n",
+		"-M, --ignore-missing      ignore missing dependency files\n",
+		"-I, --ignore-invalid      ignore JS parsing issues\n"
 	);
 }
 
@@ -151,6 +155,18 @@ function validateParams() {
 	) {
 		QUIT("'--groups (-G)' must have no value");
 	}
+	else if (
+		"ignore-missing" in args &&
+		typeof args["ignore-missing"] != "boolean"
+	) {
+		QUIT("'--ignore-missing (-M)' must have no value");
+	}
+	else if (
+		"ignore-invalid" in args &&
+		typeof args["ignore-invalid"] != "boolean"
+	) {
+		QUIT("'--ignore-invalid (-I)' must have no value");
+	}
 }
 
 function processParams() {
@@ -168,7 +184,7 @@ function processParams() {
 
 function QUIT(fatal,hideHelp) {
 	if (fatal) {
-		console.error(fatal);
+		console.error("scantree:",fatal);
 		console.error("");
 	}
 	if (!hideHelp) {
@@ -194,8 +210,8 @@ function main() {
 			groups: args.groups,
 
 			ignore: {
-				invalid: true,
-				missing: false
+				missing: args["ignore-missing"],
+				invalid: args["ignore-invalid"]
 			}
 		});
 		process.stdout.write(output);

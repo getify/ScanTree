@@ -1,6 +1,6 @@
 # ScanTree
 
-Scan JS file tree to build an ordered and grouped dependency listing.
+Scan a JS file tree to build an ordered and grouped dependency listing.
 
 ## Why
 
@@ -95,7 +95,7 @@ The reason all relative dependency paths are relative to the *base directory* in
 ```
 usage: scantree [--file|--dir]=path [opt ...]
 
-options:
+Options:
 --help                    show this help
 
 --file=file               scan a single file
@@ -116,6 +116,8 @@ options:
                           (JSON only, default: on)
 -N, --no-groups           don't group parallel dependencies
                           (JSON only)
+-M, --ignore-missing      ignore missing dependency files
+-I, --ignore-invalid      ignore JS parsing issues
 ```
 
 You specify file(s) to scan by using one or more `--file` and/or `--dir` flags.
@@ -131,6 +133,10 @@ By default, the [output will be valid JSON](#json-output): an array of the files
 By default, the JSON representation will [group "parallel" dependencies](#json-output) into sub-arrays, which indicates those files can run in any order within the group (groups must still run overall in the order specified).
 
 To disable this grouping, use `--no-groups (-N)`. Grouping is also disabled with `--output=simple`.
+
+Suppress errors for missing dependency files with `--ignore-missing` and for invalid files (failure to parse the JS) with `--ignore-invalid`.
+
+**Tip:** You can turn on `--ignore-invalid` to let *ScanTree* try to find dependency annotation(s) at the top of a file that's not otherwise valid JS, like a CSS file.
 
 ### Node Module
 
@@ -151,9 +157,9 @@ The `options` correspond similarly to the [CLI parameters](#cli) described above
 * `recursive` (`boolean`, default: `false`): make directory scans recursive
 * `full_paths` (`boolean`, default: `false`): include full paths for dependencies
 * `groups` (`boolean`, default: `true`): group "parallel" dependencies in JSON output
-* `ignore` (`object`):
-  - `ignore.invalid` (`boolean`): ignore files where the scan fails
+* `ignore` (`object`, `boolean`): if `true`/`false`, will set all sub-properties accordingly; otherwise, should be an object with one or more of these:
   - `ignore.missing` (`boolean`): ignore files or directories not found
+  - `ignore.invalid` (`boolean`): ignore files where the scan fails
 
 **Note:** `files`, `dirs`, and `excludes` are all plurally named as options, but singularly named as [CLI parameters](#cli).
 
