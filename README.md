@@ -63,12 +63,13 @@ By default the *base directory* is the current working directory you invoke the 
 For example, consider this directory structure :
 
 ```
-/tmp/hello/a.js
-/tmp/hello/foo/
+/tmp/hello/
+  a.js
+  foo/
     b.js
     c.js
     bar/
-        d.js
+      d.js
 ```
 
 If the *base directory* is set to `/tmp/hello/` and `d.js` needs to depend on `c.js`, the annotation in `d.js` should be:
@@ -193,7 +194,7 @@ Or:
 node tests.js
 ```
 
-The test suite uses the `test/` directory, which has the following structure:
+The test suite uses the `test/` directory, which has the following contents and structure:
 
 ```
 a.js
@@ -222,6 +223,7 @@ a.js ->
 c.js ->
     e.js
     f.js
+    http://some.url/j.js
 d.js ->
     e.js
     c.js
@@ -245,7 +247,7 @@ From the CLI:
 
 ```
 scantree --dir=test/ --base-dir=test/ --recursive
-[["baz/f.js","e.js"],"foo/c.js",["foo/bar/d.js","foo/b.js"],"a.js",["baz/bam/g.js","i.js"],"baz/bam/h.js"]
+[["http://some.url/j.js","baz/f.js","e.js"],"foo/c.js",["foo/bar/d.js","foo/b.js"],"a.js",["baz/bam/g.js","i.js"],"baz/bam/h.js"]
 ```
 
 And prettifying that JSON to illustrate the structure:
@@ -253,6 +255,7 @@ And prettifying that JSON to illustrate the structure:
 ```js
 [
   [
+    "http://some.url/j.js",
     "baz/f.js",
     "e.js"
   ],
@@ -283,7 +286,7 @@ var scantree = require("scantree"),
     });
 
 console.log(output);
-// [["baz/f.js","e.js"],"foo/c.js",["foo/bar/d.js","foo/b.js"],"a.js",["baz/bam/g.js","i.js"],"baz/bam/h.js"]
+// [["http://some.url/j.js","baz/f.js","e.js"],"foo/c.js",["foo/bar/d.js","foo/b.js"],"a.js",["baz/bam/g.js","i.js"],"baz/bam/h.js"]
 ```
 
 **Note:** This default `"json"` output format is a string of JSON content. If you want the actual `array` structure, you'll need to pass `output` to `JSON.parse(..)` -- see below.
@@ -294,18 +297,19 @@ And to illustrate simple (non-JSON) output:
 
 ```
 scantree --dir=test/ --base-dir=test/ --recursive --output=simple
-baz/f.jse.jsfoo/c.jsfoo/bar/d.jsfoo/b.jsa.jsbaz/bam/g.jsi.jsbaz/bam/h.js
+http://some.url/j.jsbaz/f.jse.jsfoo/c.jsfoo/bar/d.jsfoo/b.jsa.jsbaz/bam/g.jsi.jsbaz/bam/h.js
 ```
 
-This output format is specifically useful for piping to `xargs`. For example, to concat all the files in their proper order (to generate a single concatenated file), run:
+This output format is specifically useful for piping to `xargs` on the command line. For example, to concat all the files in their proper order (to generate a single concatenated file), run:
 
 ```
-scantree --dir=test/ --base-dir=test/ --recursive --output=simple | xargs -0 -I % echo test/% | xargs -L 1 cat
+scantree --dir=test/ --base-dir=test/ --recursive --output=simple | xargs -0 -I % echo test/% | xargs -L 1 cat 2>/dev/null
 
 console.log("f");
 console.log("e");
 // require: e.js
 // require: baz/f.js
+// require: http://some.url/j.js
 
 console.log("c");
 // require: e.js
@@ -330,7 +334,7 @@ console.log("i");
 console.log("h");
 ```
 
-**Note:** The `xargs -0 -I % echo test/%` command takes all the null-terminated paths from *ScanTree* and prints them out one-per-line with `test/` in front of them (`test/foo/b.js` instead of `foo/b.js`). The `xargs -L 1 cat` takes each line and passes it to `cat` to print out that file's contents.
+**Note:** The `xargs -0 -I % echo test/%` command takes all the null-terminated paths from *ScanTree* and prints them out one-per-line with `test/` in front of them (`test/foo/b.js` instead of `foo/b.js`). The `xargs -L 1 cat 2>/dev/null` takes each line and passes it to `cat` to print out that file's contents (ignoring files that can't be read, like remote URLs).
 
 The lib usage equivalent of the above CLI command is:
 
@@ -344,7 +348,8 @@ var scantree = require("scantree"),
     });
 
 console.log( output.split("\0").slice(0,-1) );
-// [ 'baz/f.js',
+// [ 'http://some.url/j.js'
+//   'baz/f.js',
 //   'e.js',
 //   'foo/c.js',
 //   'foo/bar/d.js',
