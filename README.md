@@ -54,6 +54,16 @@ Dependency annotations can appear anywhere in valid JS syntax, but it's recommen
 
 **Note:** HTTP/S URLs (or `//domain.tld` protocol-relative URLs) *can* be annotated as dependencies, but they are not fetched/scanned for their own dependencies; they're just added to the dependency tree.
 
+#### TypeScript Annotations
+
+*ScanTree* also supports TypeScript-style reference annotations:
+
+```js
+/// <reference path="baz/f.js"/>
+```
+
+**Warning:** As explained in the next section, *ScanTree* has certain expectations about relative paths that may or may not fit with how TypeScript reference annotations' relative paths are interpreted.
+
 #### Relative Paths
 
 If you use a relative path in a dependency annotation, it is *not* considered relative to that file's location, but rather relative to the *base directory* of the scan.
@@ -308,7 +318,10 @@ scantree --dir=test/ --base-dir=test/ --recursive --output=simple | xargs -0 -I 
 console.log("f");
 console.log("e");
 // require: e.js
-// require: baz/f.js
+
+// TypeScript-style annotation:
+/// <reference path="baz/f.js"/>
+
 // require: http://some.url/j.js
 
 console.log("c");

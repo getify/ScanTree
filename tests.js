@@ -57,7 +57,7 @@ cli_tests = [
 	},
 	{
 		command: "bin/scantree --file=README.md",
-		assert: 'scantree: Invalid: /tmp/README.md'
+		assert: 'scantree: Invalid: /tmp/README.md\nSyntaxError: Unexpected character \'#\' (1:0)'
 			.replace(/\/tmp/g,function(){
 				return DIR_CWD;
 			})
@@ -118,7 +118,7 @@ lib_tests = [
 	},
 	{
 		opts: { files: "README.md" },
-		assert: 'Invalid: /tmp/README.md'
+		assert: 'Invalid: /tmp/README.md\nSyntaxError: Unexpected character \'#\' (1:0)'
 			.replace(/\/tmp/g,function(){
 				return DIR_CWD;
 			})
@@ -156,7 +156,7 @@ cli_tests.forEach(function eacher(test){
 	}
 
 	if (test.assert !== res) {
-		throw ("Test (" + test_idx + ") failed:\n  " + res);
+		throw ("Test (" + test_idx + ") failed:\n\n  " + test.assert + "\n\n  " + res);
 	}
 	console.log("Test " + test_idx + " passed");
 });
@@ -174,7 +174,7 @@ lib_tests.forEach(function eacher(test){
 	}
 
 	if (test.assert !== res) {
-		throw ("Test (" + test_idx + ") failed:\n  " + res);
+		throw ("Test (" + test_idx + ") failed:\n\n  " + test.assert + "\n\n  " + res);
 	}
 	console.log("Test " + test_idx + " passed");
 });
