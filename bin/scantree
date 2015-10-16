@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 
 "use strict";
-
 var path = require("path"),
 	args = require("minimist")(process.argv,{
-		boolean: [ "recursive", "full-paths", "groups", "ignore-missing", "ignore-invalid" ],
+		boolean: [ "recursive", "full-paths", "force-slash-separator", "groups", "ignore-missing", "ignore-invalid" ],
 		string: [ "file", "dir", "base-dir", "output", "exclude" ],
 		default: {
 			"recursive": false,
 			"full-paths": false,
+			"force-slash-separator": false,
 			"groups": true,
 			"exclude": []
 		},
 		alias: {
 			"recursive": "R",
 			"full-paths": "F",
+			"force-slash-separator": "S",
 			"groups": "G",
 			"no-groups": "N",
 			"ignore-missing": "M",
@@ -23,7 +24,6 @@ var path = require("path"),
 	}),
 	scantree = require(path.join(__dirname,"..","lib","index.js"))
 ;
-
 main();
 
 // ***********************************
@@ -36,28 +36,31 @@ function printHelp() {
 		"usage: scantree [--file|--dir]=path [opt ...]\n",
 		"\n",
 		"Options:\n",
-		"--help                    show this help\n",
+		"--help                      show this help\n",
 		"\n",
-		"--file=file               scan a single file\n",
-		"--dir=directory           scan all files in a directory\n",
-		"--exclude=pattern         exclude any included paths that match pattern (JS regex)\n",
+		"--file=file                 scan a single file\n",
+		"--dir=directory             scan all files in a directory\n",
+		"--exclude=pattern           exclude any included paths that match pattern (JS regex)\n",
 		"\n",
-		"--base-dir=directory      search relative dependency paths starting from this location\n",
-		"--output=[simple|json]    output simple linear list of null-separated values, or JSON\n",
-		"                          (default: json)\n",
+		"--base-dir=directory        search relative dependency paths starting from this location\n",
+		"--output=[simple|json]      output simple linear list of null-separated values, or JSON\n",
+		"                            (default: json)\n",
 		"\n",
-		"-R, --recursive           directory scan is recursive\n",
-		"                          (default: off)\n",
-		"-F, --full-paths          include full paths in all dependencies; otherwise strip\n",
-		"                          BASE-DIR from paths\n",
-		"                          (default: off)\n",
-		"-G, --groups              group parallel dependencies -- those which don't depend on\n",
-		"                          each other and can thus run in arbitrary order\n",
-		"                          (JSON only, default: on)\n",
-		"-N, --no-groups           don't group parallel dependencies\n",
-		"                          (JSON only)\n",
-		"-M, --ignore-missing      ignore missing dependency files\n",
-		"-I, --ignore-invalid      ignore JS parsing issues\n"
+		"-R, --recursive             directory scan is recursive\n",
+		"                            (default: off)\n",
+		"-F, --full-paths            include full paths in all dependencies; otherwise strip\n",
+		"                            BASE-DIR from paths\n",
+		"                            (default: off)\n",
+		"-S, --force-slash-separator force output to use slash as file path separator; otherwise \n",
+		"                            it will keep the default platform separator\n",
+		"                            (default: off)\n",
+		"-G, --groups                group parallel dependencies -- those which don't depend on\n",
+		"                            each other and can thus run in arbitrary order\n",
+		"                            (JSON only, default: on)\n",
+		"-N, --no-groups             don't group parallel dependencies\n",
+		"                            (JSON only)\n",
+		"-M, --ignore-missing        ignore missing dependency files\n",
+		"-I, --ignore-invalid        ignore JS parsing issues\n"
 	);
 }
 
@@ -141,6 +144,12 @@ function validateParams() {
 		QUIT("'--full-paths (-F)' must have no value");
 	}
 	else if (
+		"force-slash-separator" in args &&
+		typeof args["force-slash-separator"] != "boolean"
+	) {
+		QUIT("'--force-slash-separator (-S)' must have no value");
+	}
+	else if (
 		args.output &&
 		!(
 			args.output === "simple" ||
@@ -207,6 +216,7 @@ function main() {
 			output: args.output,
 			recursive: args.recursive,
 			full_paths: args["full-paths"],
+			force_slash_separator: args["force-slash-separator"],
 			groups: args.groups,
 
 			ignore: {
