@@ -142,7 +142,7 @@ If you use `--dir`, that directory's contents will be examined (non-recursively)
 
 All dependency annotations with relative filepaths will default to resolving against the current directory where the tool is being invoked. If you want to set a different base directory, use `--base-dir`. By default, all paths that are relative to the base directory (default or specified) will be output as relative (base directory trimmed). To output full filepaths instead, use `--full-paths (-F)`.
 
-The separator used by scantree in the paths is based on the platform separator. Typically on windows the separator will be backslash (\). If you want to force the output to use an slash instead (/), you can use `--force-slash-separator (-S)`. That option is a noop if the slash is already the separator (i.e. on linux).
+The separator used by scantree in the paths is based on the platform separator. Typically on windows the separator will be backslash (\\). If you want to force the output to use an slash instead (/), you can use `--force-slash-separator (-S)`. That option is a noop if the slash is already the separator (i.e. on linux).
 
 By default, the [output will be valid JSON](#json-output): an array of the files in the order they need to be executed to satisfy the dependencies. To suppress JSON and [output a null-separated list](#simple-output) of file paths (like `find .. --print0` suitable for `xargs -0`-style processing), use `--output=simple`.
 
