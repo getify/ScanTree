@@ -107,28 +107,31 @@ The reason all relative dependency paths are relative to the *base directory* in
 usage: scantree [--file|--dir]=path [opt ...]
 
 Options:
---help                    show this help
+--help                      show this help
 
---file=file               scan a single file
---dir=directory           scan all files in a directory
---exclude=pattern         exclude any included paths that match pattern (JS regex)
+--file=file                 scan a single file
+--dir=directory             scan all files in a directory
+--exclude=pattern           exclude any included paths that match pattern (JS regex)
 
---base-dir=directory      search relative dependency paths starting from this location
---output=[simple|json]    output simple linear list of null-separated values, or JSON
-                          (default: json)
+--base-dir=directory        search relative dependency paths starting from this location
+--output=[simple|json]      output simple linear list of null-separated values, or JSON
+                            (default: json)
 
--R, --recursive           directory scan is recursive
-                          (default: off)
--F, --full-paths          include full paths in all dependencies; otherwise strip
-                          BASE-DIR from paths
-                          (default: off)
--G, --groups              group parallel dependencies -- those which don't depend on
-                          each other and can thus run in arbitrary order
-                          (JSON only, default: on)
--N, --no-groups           don't group parallel dependencies
-                          (JSON only)
--M, --ignore-missing      ignore missing dependency files
--I, --ignore-invalid      ignore JS parsing issues
+-R, --recursive             directory scan is recursive
+                            (default: off)
+-F, --full-paths            include full paths in all dependencies; otherwise strip
+                            BASE-DIR from paths
+                            (default: off)
+-S, --force-slash-separator force output to use slash as file path separator; otherwise \n",
+                            it will keep the default platform separator\n",
+                            (default: off)\n",
+-G, --groups                group parallel dependencies -- those which don't depend on
+                            each other and can thus run in arbitrary order
+                            (JSON only, default: on)
+-N, --no-groups             don't group parallel dependencies
+                            (JSON only)
+-M, --ignore-missing        ignore missing dependency files
+-I, --ignore-invalid        ignore JS parsing issues
 ```
 
 You specify file(s) to scan by using one or more `--file` and/or `--dir` flags.
@@ -138,6 +141,8 @@ You specify file(s) to scan by using one or more `--file` and/or `--dir` flags.
 If you use `--dir`, that directory's contents will be examined (non-recursively), and all found JS files will be scanned. Use `--recursive (-R)` to recursively examine sub-directories. To exclude any files/paths from this processing, use one or more `--exclude` flags, specifying a JS-style regular expression to match for exclusion (note: to avoid shell escaping issues, surround your regex in ' ' quotes).
 
 All dependency annotations with relative filepaths will default to resolving against the current directory where the tool is being invoked. If you want to set a different base directory, use `--base-dir`. By default, all paths that are relative to the base directory (default or specified) will be output as relative (base directory trimmed). To output full filepaths instead, use `--full-paths (-F)`.
+
+The separator used by scantree in the paths is based on the platform separator. Typically on windows the separator will be backslash (\\). If you want to force the output to use an slash instead (/), you can use `--force-slash-separator (-S)`. That option is a noop if the slash is already the separator (i.e. on linux).
 
 By default, the [output will be valid JSON](#json-output): an array of the files in the order they need to be executed to satisfy the dependencies. To suppress JSON and [output a null-separated list](#simple-output) of file paths (like `find .. --print0` suitable for `xargs -0`-style processing), use `--output=simple`.
 
@@ -167,6 +172,7 @@ The `options` correspond similarly to the [CLI parameters](#cli) described above
 * `output` (`string`: `"simple"`, `"json"`): specifies the output format
 * `recursive` (`boolean`, default: `false`): make directory scans recursive
 * `full_paths` (`boolean`, default: `false`): include full paths for dependencies
+* `force_slash_separator` (`boolean`, default: `false`): force output to use slash separator
 * `groups` (`boolean`, default: `true`): group "parallel" dependencies in JSON output
 * `ignore` (`object`, `boolean`): if `true`/`false`, will set all sub-properties accordingly; otherwise, should be an object with one or more of these:
   - `ignore.missing` (`boolean`): ignore files or directories not found
